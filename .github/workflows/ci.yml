@@ -1,9 +1,8 @@
-name: CI Pipeline
+name: Auto Deploy Flask Page
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
 
 jobs:
   build:
@@ -11,18 +10,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build stage
-        run: echo "Building stage is done"
+        run: echo " Build completed successfully!"
 
   test:
     runs-on: ubuntu-latest
     needs: build
     steps:
       - name: Test stage
-        run: echo "Tests finished successfully"
+        run: echo " Test stage passed!"
 
   deploy:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - name: Deploy stage
-        run: echo "Deployment step is done"
+      - uses: actions/checkout@v4
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/html
+            rm -rf app
+            mkdir app
+            cd app
+            git clone https://github.com/avinurb/software-course.git .
+            apt install -y python3-venv python3-pip
+            python3 -m venv venv
+            ./venv/bin/pip install flask gunicorn
+            pkill gunicorn || true
+            nohup ./venv/bin/gunicorn -b 0.0.0.0:5000 app:app > /dev/null 2>&1 &
+            echo " Deployment successful!"
