@@ -10,36 +10,60 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build stage
-        run: echo " Build completed successfully!"
+        run: echo "Build completed successfully!"
 
   test:
     runs-on: ubuntu-latest
     needs: build
     steps:
       - name: Test stage
-        run: echo " Test stage passed!"
+        run: echo "Test stage passed!"
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.1.0
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
+          host: ${{ secrets.SSH_HOST }}        # 178.239.151.73
+          username: ${{ secrets.SSH_USER }}    # root
+          key: ${{ secrets.SSH_KEY }}          # محتوای کامل ~/.ssh/id_rsa
           port: 22
+          script_stop: true
           script: |
-            cd /var/www/html
-            rm -rf app
-            mkdir app
-            cd app
-            git clone https://github.com/avinurb/software-course.git .
-            apt install -y python3-venv python3-pip
-            python3 -m venv venv
+            set -e
+
+            DEPLOY_DIR="${DEPLOY_PATH:-/var/www/html}"
+            APP_DIR="$DEPLOY_DIR/app"
+
+            echo "[1/6] Prep folders"
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+
+            echo "[2/6] Fetch latest code"
+            if [ -d .git ]; then
+              git fetch --all
+              git reset --hard origin/main
+            else
+              rm -rf ./*
+              git clone https://github.com/${{ github.repository }} . --branch main --depth 1
+            fi
+
+            echo "[3/6] Install Python runtime"
+            apt-get update -y
+            apt-get install -y python3-venv python3-pip
+
+            echo "[4/6] Create/Update venv & deps"
+            [ -d venv ] || python3 -m venv venv
+            ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install flask gunicorn
-            pkill gunicorn || true
-            nohup ./venv/bin/gunicorn -b 0.0.0.0:5000 app:app > /dev/null 2>&1 &
-            echo " Deployment successful!"
+
+            echo "[5/6] Restart Gunicorn on :5000"
+            pkill -f "gunicorn.*:5000" || true
+            nohup ./venv/bin/gunicorn -b 0.0.0.0:5000 app:app > gunicorn.log 2>&1 &
+
+            echo "[6/6] Done. Deployed to $APP_DIR and listening on port 5000."
