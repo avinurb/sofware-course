@@ -47,5 +47,5 @@ jobs:
 
             echo " Restarting server"
             pkill gunicorn || true
-            nohup ./venv/bin/gunicorn -b 0.0.0.0:5000 app:app > /dev/null 2>&1 &
+            nohup ./venv/bin/gunicorn -b 0.0.0.0:5032 app:app > /dev/null 2>&1 &
             echo " Deployment completed"
